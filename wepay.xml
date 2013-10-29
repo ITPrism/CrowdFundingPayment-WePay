@@ -7,7 +7,7 @@
     <authorEmail>todor@itprism.com</authorEmail>
     <authorUrl>http://itprism.com</authorUrl>
     <version>1.0</version>
-    <creationDate>25 October, 2013</creationDate>
+    <creationDate>28 October, 2013</creationDate>
     <description><![CDATA[
 	<p>CrowdFunding Payment - WePay is a plugin that provides functionality for making a payment via WePay, using iFrame form method.</p>
     <p><strong>NOTE</strong>: WePay only works with USD.</p>
