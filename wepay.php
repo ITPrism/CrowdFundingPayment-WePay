@@ -754,8 +754,8 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
     
                 // Log error
                 $this->log->add(
-                        JText::_("PLG_CROWDFUNDINGPAYMENT_AUTHORIZENET_ERROR_MAIL_SENDING_ADMIN"),
-                        "AUTHORIZENET_PAYMENT_PLUGIN_ERROR"
+                    JText::_("PLG_CROWDFUNDINGPAYMENT_AUTHORIZENET_ERROR_MAIL_SENDING_ADMIN"),
+                    "WEPAY_PAYMENT_PLUGIN_DEBUG"
                 );
     
             }
@@ -806,8 +806,8 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
     
                 // Log error
                 $this->log->add(
-                        JText::_("PLG_CROWDFUNDINGPAYMENT_AUTHORIZENET_ERROR_MAIL_SENDING_ADMIN"),
-                        "AUTHORIZENET_PAYMENT_PLUGIN_ERROR"
+                    JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_MAIL_SENDING_PROJECT_OWNER"),
+                    "WEPAY_PAYMENT_PLUGIN_DEBUG"
                 );
     
             }
@@ -858,8 +858,8 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
     
                 // Log error
                 $this->log->add(
-                        JText::_("PLG_CROWDFUNDINGPAYMENT_AUTHORIZENET_ERROR_MAIL_SENDING_ADMIN"),
-                        "AUTHORIZENET_PAYMENT_PLUGIN_ERROR"
+                    JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_MAIL_SENDING_USER"),
+                    "WEPAY_PAYMENT_PLUGIN_DEBUG"
                 );
     
             }
