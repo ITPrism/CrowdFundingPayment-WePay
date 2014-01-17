@@ -2,12 +2,12 @@
 <extension version="3.2" type="plugin" group="crowdfundingpayment" method="upgrade">
     <name>PLG_CROWDFUNDINGPAYMENT_WEPAY</name>
     <author>Todor Iliev</author>
-    <copyright>Copyright (C) 2013 Todor Iliev ( ITPrism.com ). All rights reserved.</copyright>
+    <copyright>Copyright (C) 2014 Todor Iliev ( ITPrism.com ). All rights reserved.</copyright>
     <license>http://www.gnu.org/copyleft/gpl.html GNU/GPL</license>
     <authorEmail>todor@itprism.com</authorEmail>
     <authorUrl>http://itprism.com</authorUrl>
-    <version>1.1</version>
-    <creationDate>08 December, 2013</creationDate>
+    <version>1.2</version>
+    <creationDate>17 January, 2014</creationDate>
     <description><![CDATA[
 	<p>CrowdFunding Payment - WePay is a plugin that provides functionality for making a payment via WePay, using iFrame form method.</p>
     <p><strong>NOTE</strong>: WePay only works with USD.</p>
@@ -35,7 +35,7 @@
                 <field name="wepay_client_id" type="text" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_CLIENT_ID" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_CLIENT_ID_DESC" />
                 <field name="wepay_client_secret" type="text" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_CLIENT_SECRET" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_CLIENT_SECRET_DESC" />
                 <field name="wepay_return_url" type="text" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_REDIRECT_URL" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_REDIRECT_URL_DESC" class="span6" />
-                <field name="wepay_notify_url" type="text" default="index.php?option=com_crowdfunding&amp;task=notifier.notify&amp;format=raw" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_NOTIFY_URL" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_NOTIFY_URL_DESC" class="span6" />
+                <field name="wepay_notify_url" type="text" default="index.php?option=com_crowdfunding&amp;task=notifier.notify&amp;format=raw&amp;payment_service=wepay" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_NOTIFY_URL" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_NOTIFY_URL_DESC" class="span6" />
                 
                 <field name="wepay_display_info" type="radio" default="1" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_DISPLAY_INFO" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_DISPLAY_INFO_DESC" class="btn-group" >
                     <option value="0">JNO</option>

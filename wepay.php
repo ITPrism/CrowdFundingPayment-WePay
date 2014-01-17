@@ -3,14 +3,14 @@
  * @package      CrowdFunding
  * @subpackage   Plugins
  * @author       Todor Iliev
- * @copyright    Copyright (C) 2013 Todor Iliev <todor@itprism.com>. All rights reserved.
+ * @copyright    Copyright (C) 2014 Todor Iliev <todor@itprism.com>. All rights reserved.
  * @license      http://www.gnu.org/copyleft/gpl.html GNU/GPL
  */
 
 // no direct access
 defined('_JEXEC') or die;
 
-jimport('joomla.plugin.plugin');
+jimport('crowdfunding.payment.plugin');
 
 /**
  * CrowdFunding WePay Payment Plugin
@@ -20,28 +20,15 @@ jimport('joomla.plugin.plugin');
  * 
  * @todo Use $this->app and $autoloadLanguage to true, when Joomla! 2.5 is not actual anymore.
  */
-class plgCrowdFundingPaymentWePay extends JPlugin {
+class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin {
     
     const WEPAY_ERROR_CONFIGURATION = 101;
     const WEPAY_ERROR_CHECKOUT      = 102;
      
-    protected   $log;
-    protected   $logFile = "plg_crowdfunding_wepay.php";
+    protected   $paymentService = "wepay";
     
-    public function __construct(&$subject, $config = array()) {
-    
-        parent::__construct($subject, $config);
-    
-        // Create log object
-        $file = JPath::clean(JFactory::getApplication()->getCfg("log_path") .DIRECTORY_SEPARATOR. $this->logFile);
-    
-        $this->log = new CrowdFundingLog();
-        $this->log->addWriter(new CrowdFundingLogWriterDatabase(JFactory::getDbo()));
-        $this->log->addWriter(new CrowdFundingLogWriterFile($file));
-    
-        // Load language
-        $this->loadLanguage();
-    }
+    protected   $textPrefix   = "PLG_CROWDFUNDINGPAYMENT_WEPAY";
+    protected   $debugType    = "WEPAY_PAYMENT_PLUGIN_DEBUG";
     
     /**
      * This method prepares a payment gateway - buttons, forms,...
@@ -52,6 +39,10 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
      * @param JRegistry $params	    The parameters of the component
      */
     public function onProjectPayment($context, $item, $params) {
+        
+        if(strcmp("com_crowdfunding.payment", $context) != 0){
+            return;
+        }
         
         $app = JFactory::getApplication();
         /** @var $app JSite **/
@@ -69,13 +60,6 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
             return;
         }
        
-        if(strcmp("com_crowdfunding.payment", $context) != 0){
-            return;
-        }
-        
-        // Load language
-        $this->loadLanguage();
-        
         // Flag for error.
         $error = false;
         
@@ -92,7 +76,11 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
         $aUserId       = $app->getUserState("auser_id");
         
         // Create intention object
-        $intention     = CrowdFundingHelper::getIntention($userId, $aUserId, $item->id);
+        $intention     = $this->getIntention(array(
+            "user_id"       => $userId,
+            "auser_id"      => $aUserId,
+            "project_id"    => $item->id
+        ));
         
         $accountId     = (int)$this->params->get("wepay_account_id");
         $accessToken   = JString::trim($this->params->get("wepay_access_token"));
@@ -129,7 +117,7 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
                 $response = $wePay->request('checkout/create', array(
                     'account_id'        => $accountId,
                     'amount'            => $item->amount,
-                    'short_description' => JText::sprintf("PLG_CROWDFUNDINGPAYMENT_WEPAY_INVESTING_IN_S", htmlentities($item->title, ENT_QUOTES, "UTF-8")),
+                    'short_description' => JText::sprintf($this->textPrefix."_INVESTING_IN_S", htmlentities($item->title, ENT_QUOTES, "UTF-8")),
                     'type'              => 'DONATION',
                     'redirect_uri'      => $returnUrl,
                     'callback_uri'      => $notifyUrl,
@@ -138,10 +126,10 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
                     $customCertificate);
                 
                 // DEBUG DATA
-                JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_WEPAY_CO"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $wePay) : null;
+                JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_WEPAY_CO"), $this->debugType, $wePay) : null;
                 
                 // DEBUG DATA
-                JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_WEPAY_COR"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $response) : null;
+                JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_WEPAY_COR"), $this->debugType, $response) : null;
                 
                 $intentionData = array(
                     "txn_id"    => $response->checkout_id,
@@ -161,7 +149,7 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
         }
             
         $html   =  array();
-        $html[] = '<h4><img src="'.$pluginURI.'/images/wepay_icon.png" width="32" height="32" alt="WePay" />'.JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_TITLE").'</h4>';
+        $html[] = '<h4><img src="'.$pluginURI.'/images/wepay_icon.png" width="32" height="32" alt="WePay" />'.JText::_($this->textPrefix."_TITLE").'</h4>';
         
         if(!$error) {
                 
@@ -173,11 +161,11 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
             $html[] = '<div class="clearfix"></div>';
             
             if($this->params->get('wepay_display_info', 1)) {
-                $html[] = '<p class="sticky">'.JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_INFO").'</p>';
+                $html[] = '<p class="sticky">'.JText::_($this->textPrefix."_INFO").'</p>';
             }
             
             if($this->params->get('wepay_sandbox', 1)) {
-                $html[] = '<p class="sticky">'.JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_WORKS_SANDBOX").'</p>';
+                $html[] = '<p class="sticky">'.JText::_($this->textPrefix."_WORKS_SANDBOX").'</p>';
             }
             
             $html[] = '</div>';
@@ -196,11 +184,11 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
             
             switch($error) {
                 case 101:
-                    $html[] = '<div class="alert">'.JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_CONFIGURATION").'</div>';
+                    $html[] = '<div class="alert">'.JText::_($this->textPrefix."_ERROR_CONFIGURATION").'</div>';
                     break;
                     
                 case 102:
-                    $html[] = '<div class="alert">'.JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_CANNOT_CREATE_CHECKOUT").'</div>';
+                    $html[] = '<div class="alert">'.JText::_($this->textPrefix."_ERROR_CANNOT_CREATE_CHECKOUT").'</div>';
                     break;
             }
             
@@ -218,6 +206,10 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
      */
     public function onPaymenNotify($context, $params) {
         
+        if(strcmp("com_crowdfunding.notify.wepay", $context) != 0){
+            return;
+        }
+        
         $app = JFactory::getApplication();
         /** @var $app JSite **/
         
@@ -234,32 +226,25 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
             return;
         }
        
-        if(strcmp("com_crowdfunding.notify", $context) != 0){
-            return;
-        }
-        
-        // Load language
-        $this->loadLanguage();
-        
         // Validate request method
         $requestMethod = $app->input->getMethod();
         if(strcmp("POST", $requestMethod) != 0) {
             $this->log->add(
-                JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_INVALID_REQUEST_METHOD"),
+                JText::_($this->textPrefix."_ERROR_INVALID_REQUEST_METHOD"),
                 "WEPAY_PAYMENT_PLUGIN_ERROR",
-                JText::sprintf("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_INVALID_TRANSACTION_REQUEST_METHOD", $requestMethod)
+                JText::sprintf($this->textPrefix."_ERROR_INVALID_TRANSACTION_REQUEST_METHOD", $requestMethod)
             );
             return null;
         }
         
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_RESPONSE"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $_POST) : null;
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_RESPONSE"), $this->debugType, $_POST) : null;
         
         // Get checkout ID
         $checkoutId      = $app->input->get("checkout_id");
         if(!$checkoutId) {
             $this->log->add(
-                JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_INVALID_CHECKOUT_ID"),
+                JText::_($this->textPrefix."_ERROR_INVALID_CHECKOUT_ID"),
                 "WEPAY_PAYMENT_PLUGIN_ERROR"
             );
             return null;
@@ -276,7 +261,7 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
         // Get currency
         jimport("crowdfunding.currency");
         $currencyId      = $params->get("project_currency");
-        $currency        = CrowdFundingCurrency::getInstance($currencyId);
+        $currency        = CrowdFundingCurrency::getInstance(JFactory::getDbo(), $currencyId);
         
         // Get intention data
         $keys = array(
@@ -286,12 +271,12 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
         $intention     = new CrowdFundingIntention($keys);
         
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_INTENTION"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $intention->getProperties()) : null;
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_INTENTION"), $this->debugType, $intention->getProperties()) : null;
         
         // Validate the payment gateway.
         if(!$this->isWePayGateway($intention)) {
             $this->log->add(
-                JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_INVALID_PAYMENT_GATEWAY"),
+                JText::_($this->textPrefix."_ERROR_INVALID_PAYMENT_GATEWAY"),
                 "WEPAY_PAYMENT_PLUGIN_ERROR",
                 array("INTENTION" => $intention->getProperties())
             );
@@ -328,16 +313,16 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
             $response = $wePay->request('checkout', $requestParams, $customCertificate);
         
             // DEBUG DATA
-            JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_WEPAY_CHECKOUT"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $wePay) : null;
+            JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_WEPAY_CHECKOUT"), $this->debugType, $wePay) : null;
             
             // DEBUG DATA
-            JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_WEPAY_COR"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $response) : null;
+            JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_WEPAY_COR"), $this->debugType, $response) : null;
             
         } catch (Exception $e) {
         
             // Log error
             $this->log->add(
-                JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_CHECKOUT_REQUEST"), 
+                JText::_($this->textPrefix."_ERROR_CHECKOUT_REQUEST"), 
                 "WEPAY_PAYMENT_PLUGIN_ERROR", 
                 $e->getMessage()
             );
@@ -355,7 +340,7 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
         }
         
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_VALID_DATA"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $validData) : null;
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_VALID_DATA"), $this->debugType, $validData) : null;
         
         // Get project
         jimport("crowdfunding.project");
@@ -363,12 +348,12 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
         $project   = CrowdFundingProject::getInstance($projectId);
         
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_PROJECT_OBJECT"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $project->getProperties()) : null;
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_PROJECT_OBJECT"), $this->debugType, $project->getProperties()) : null;
         
         // Check for valid project
         if(!$project->getId()) {
-            $error  = JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_INVALID_PROJECT");
-            $error .= "\n". JText::sprintf("PLG_CROWDFUNDINGPAYMENT_WEPAY_TRANSACTION_DATA", var_export($validData, true));
+            $error  = JText::_($this->textPrefix."_ERROR_INVALID_PROJECT");
+            $error .= "\n". JText::sprintf($this->textPrefix."_TRANSACTION_DATA", var_export($validData, true));
 			JLog::add($error);
 			return $result;
         }
@@ -405,7 +390,7 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
         }
         
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_RESULT_DATA"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $result) : null;
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_RESULT_DATA"), $this->debugType, $result) : null;
         
         // Remove intention
         $intention->delete();
@@ -426,6 +411,10 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
      */
     public function onAfterPayment($context, &$transaction, $params, $project, $reward) {
         
+        if(strcmp("com_crowdfunding.notify.wepay", $context) != 0){
+            return;
+        }
+        
         $app = JFactory::getApplication();
         /** @var $app JSite **/
         
@@ -442,10 +431,6 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
             return;
         }
        
-        if(strcmp("com_crowdfunding.notify.wepay", $context) != 0){
-            return;
-        }
-        
         // Send mails
         $this->sendMails($project, $transaction);
         
@@ -504,7 +489,7 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
         if(!$transaction["project_id"] OR !$transaction["txn_id"]) {
             // Log data in the database
             $this->log->add(
-                JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_INVALID_TRANSACTION_DATA"),
+                JText::_($this->textPrefix."_ERROR_INVALID_TRANSACTION_DATA"),
                 "WEPAY_PAYMENT_PLUGIN_ERROR",
                 $transaction
             );
@@ -512,74 +497,6 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
         }
         
         return $transaction;
-    }
-    
-    protected function updateReward(&$data) {
-        
-        // Get reward
-        jimport("crowdfunding.reward");
-        $keys   = array(
-        	"id"         => $data["reward_id"], 
-        	"project_id" => $data["project_id"]
-        );
-        $reward = new CrowdFundingReward($keys);
-        
-        // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_REWARD_OBJECT"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $reward->getProperties()) : null;
-        
-        // Check for valid reward
-        if(!$reward->getId()) {
-            
-            // Log data in the database
-            $this->log->add(
-                JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_INVALID_REWARD"),
-                "WEPAY_PAYMENT_PLUGIN_ERROR",
-                array("data" => $data, "reward object" => $reward->getProperties())
-            );
-            
-			
-			$data["reward_id"] = 0;
-			return null;
-        }
-        
-        // Check for valida amount between reward value and payed by user
-        $txnAmount = JArrayHelper::getValue($data, "txn_amount");
-        if($txnAmount < $reward->getAmount()) {
-            
-            // Log data in the database
-            $this->log->add(
-                JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_INVALID_REWARD_AMOUNT"),
-                "WEPAY_PAYMENT_PLUGIN_ERROR",
-                array("data" => $data, "reward object" => $reward->getProperties())
-            );
-            
-			
-			$data["reward_id"] = 0;
-			return null;
-        }
-        
-        // Verify the availability of rewards
-        if($reward->isLimited() AND !$reward->getAvailable()) {
-            
-            // Log data in the database
-            $this->log->add(
-                JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_REWARD_NOT_AVAILABLE"),
-                "WEPAY_PAYMENT_PLUGIN_ERROR",
-                array("data" => $data, "reward object" => $reward->getProperties())
-            );
-            
-			$data["reward_id"] = 0;
-			return null;
-        }
-        
-        // Increase the number of distributed rewards 
-        // if there is a limit.
-        if($reward->isLimited()) {
-            $reward->increaseDistributed();
-            $reward->store();
-        }
-        
-        return $reward;
     }
     
     /**
@@ -600,7 +517,7 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
         $transaction = new CrowdFundingTransaction($keys);
         
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_TRANSACTION_OBJECT"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $transaction->getProperties()) : null;
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_TRANSACTION_OBJECT"), $this->debugType, $transaction->getProperties()) : null;
         
         // Check for existed transaction
         if($transaction->getId()) {
@@ -645,19 +562,23 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
     
     protected function getNotifyUrl($html = true) {
         
-        $notifyPage = JString::trim($this->params->get('wepay_notify_url'));
+        $page = JString::trim($this->params->get('wepay_notify_url'));
         
         $uri        = JURI::getInstance();
         $domain     = $uri->toString(array("host"));
         
-        if( false == strpos($notifyPage, $domain) ) {
-            $notifyPage = JURI::root().str_replace("&", "&amp;", $notifyPage);
+        if( false == strpos($page, $domain) ) {
+            $page = JURI::root().str_replace("&", "&amp;", $page);
+        }
+        
+        if(false === strpos($page, "payment_service=wepay")) {
+            $page .= "&amp;payment_service=wepay";
         }
         
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_NOTIFY_URL"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $notifyPage) : null;
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_NOTIFY_URL"), $this->debugType, $page) : null;
         
-        return $notifyPage;
+        return $page;
         
     }
     
@@ -670,7 +591,7 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
         } 
         
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_DEBUG_RETURN_URL"), "WEPAY_PAYMENT_PLUGIN_DEBUG", $returnPage) : null;
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_RETURN_URL"), $this->debugType, $returnPage) : null;
         
         return $returnPage;
         
@@ -685,187 +606,6 @@ class plgCrowdFundingPaymentWePay extends JPlugin {
         }
         
         return true;
-    }
-    
-    protected function sendMails($project, $transaction) {
-    
-        $app = JFactory::getApplication();
-        /** @var $app JSite **/
-    
-        // Get website
-        $uri     = JUri::getInstance();
-        $website = $uri->toString(array("scheme", "host"));
-    
-        jimport("itprism.string");
-        jimport("crowdfunding.email");
-    
-        $emailMode  = $this->params->get("email_mode", "plain");
-    
-        // Prepare data for parsing
-        $data = array(
-            "site_name"         => $app->getCfg("sitename"),
-            "site_url"          => JUri::root(),
-            "item_title"        => $project->title,
-            "item_url"          => $website.JRoute::_(CrowdFundingHelperRoute::getDetailsRoute($project->slug, $project->catslug)),
-            "amount"            => ITPrismString::getAmount($transaction->txn_amount, $transaction->txn_currency),
-            "transaction_id"    => $transaction->txn_id
-        );
-    
-        // Send mail to the administrator
-        $emailId = $this->params->get("admin_mail_id", 0);
-        if(!empty($emailId)) {
-    
-            $table    = new CrowdFundingTableEmail(JFactory::getDbo());
-            $email    = new CrowdFundingEmail();
-            $email->setTable($table);
-            $email->load($emailId);
-    
-            if(!$email->getSenderName()) {
-                $email->setSenderName($app->getCfg("fromname"));
-            }
-            if(!$email->getSenderEmail()) {
-                $email->setSenderEmail($app->getCfg("mailfrom"));
-            }
-    
-            $recipientName = $email->getSenderName();
-            $recipientMail = $email->getSenderEmail();
-    
-            // Prepare data for parsing
-            $data["sender_name"]     =  $email->getSenderName();
-            $data["sender_email"]    =  $email->getSenderEmail();
-            $data["recipient_name"]  =  $recipientName;
-            $data["recipient_email"] =  $recipientMail;
-    
-            $email->parse($data);
-            $subject    = $email->getSubject();
-            $body       = $email->getBody($emailMode);
-    
-            $mailer  = JFactory::getMailer();
-            if(strcmp("html", $emailMode) == 0) { // Send as HTML message
-                $return  = $mailer->sendMail($email->getSenderEmail(), $email->getSenderName(), $recipientMail, $subject, $body, CrowdFundingEmail::MAIL_MODE_HTML);
-    
-            } else { // Send as plain text.
-                $return  = $mailer->sendMail($email->getSenderEmail(), $email->getSenderName(), $recipientMail, $subject, $body, CrowdFundingEmail::MAIL_MODE_PLAIN);
-    
-            }
-    
-            // Check for an error.
-            if ($return !== true) {
-    
-                // Log error
-                $this->log->add(
-                    JText::_("PLG_CROWDFUNDINGPAYMENT_AUTHORIZENET_ERROR_MAIL_SENDING_ADMIN"),
-                    "WEPAY_PAYMENT_PLUGIN_DEBUG"
-                );
-    
-            }
-    
-        }
-    
-        // Send mail to project owner
-        $emailId = $this->params->get("creator_mail_id", 0);
-        if(!empty($emailId)) {
-    
-            $table    = new CrowdFundingTableEmail(JFactory::getDbo());
-            $email    = new CrowdFundingEmail();
-            $email->setTable($table);
-            $email->load($emailId);
-    
-            if(!$email->getSenderName()) {
-                $email->setSenderName($app->getCfg("fromname"));
-            }
-            if(!$email->getSenderEmail()) {
-                $email->setSenderEmail($app->getCfg("mailfrom"));
-            }
-    
-            $user          = JFactory::getUser($transaction->receiver_id);
-            $recipientName = $user->get("name");
-            $recipientMail = $user->get("email");
-    
-            // Prepare data for parsing
-            $data["sender_name"]     =  $email->getSenderName();
-            $data["sender_email"]    =  $email->getSenderEmail();
-            $data["recipient_name"]  =  $recipientName;
-            $data["recipient_email"] =  $recipientMail;
-    
-            $email->parse($data);
-            $subject    = $email->getSubject();
-            $body       = $email->getBody($emailMode);
-    
-            $mailer  = JFactory::getMailer();
-            if(strcmp("html", $emailMode) == 0) { // Send as HTML message
-                $return  = $mailer->sendMail($email->getSenderEmail(), $email->getSenderName(), $recipientMail, $subject, $body, CrowdFundingEmail::MAIL_MODE_HTML);
-    
-            } else { // Send as plain text.
-                $return  = $mailer->sendMail($email->getSenderEmail(), $email->getSenderName(), $recipientMail, $subject, $body, CrowdFundingEmail::MAIL_MODE_PLAIN);
-    
-            }
-    
-            // Check for an error.
-            if ($return !== true) {
-    
-                // Log error
-                $this->log->add(
-                    JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_MAIL_SENDING_PROJECT_OWNER"),
-                    "WEPAY_PAYMENT_PLUGIN_DEBUG"
-                );
-    
-            }
-        }
-    
-        // Send mail to backer
-        $emailId    = $this->params->get("user_mail_id", 0);
-        $investorId = $transaction->investor_id;
-        if(!empty($emailId) AND !empty($investorId)) {
-    
-            $table    = new CrowdFundingTableEmail(JFactory::getDbo());
-            $email    = new CrowdFundingEmail();
-            $email->setTable($table);
-            $email->load($emailId);
-    
-            if(!$email->getSenderName()) {
-                $email->setSenderName($app->getCfg("fromname"));
-            }
-            if(!$email->getSenderEmail()) {
-                $email->setSenderEmail($app->getCfg("mailfrom"));
-            }
-    
-            $user          = JFactory::getUser($investorId);
-            $recipientName = $user->get("name");
-            $recipientMail = $user->get("email");
-    
-            // Prepare data for parsing
-            $data["sender_name"]     =  $email->getSenderName();
-            $data["sender_email"]    =  $email->getSenderEmail();
-            $data["recipient_name"]  =  $recipientName;
-            $data["recipient_email"] =  $recipientMail;
-    
-            $email->parse($data);
-            $subject    = $email->getSubject();
-            $body       = $email->getBody($emailMode);
-    
-            $mailer  = JFactory::getMailer();
-            if(strcmp("html", $emailMode) == 0) { // Send as HTML message
-                $return  = $mailer->sendMail($email->getSenderEmail(), $email->getSenderName(), $recipientMail, $subject, $body, CrowdFundingEmail::MAIL_MODE_HTML);
-    
-            } else { // Send as plain text.
-                $return  = $mailer->sendMail($email->getSenderEmail(), $email->getSenderName(), $recipientMail, $subject, $body, CrowdFundingEmail::MAIL_MODE_PLAIN);
-    
-            }
-    
-            // Check for an error.
-            if ($return !== true) {
-    
-                // Log error
-                $this->log->add(
-                    JText::_("PLG_CROWDFUNDINGPAYMENT_WEPAY_ERROR_MAIL_SENDING_USER"),
-                    "WEPAY_PAYMENT_PLUGIN_DEBUG"
-                );
-    
-            }
-    
-        }
-    
     }
     
 }
