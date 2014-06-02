@@ -17,595 +17,626 @@ jimport('crowdfunding.payment.plugin');
  *
  * @package      CrowdFunding
  * @subpackage   Plugins
- * 
- * @todo Use $this->app and $autoloadLanguage to true, when Joomla! 2.5 is not actual anymore.
  */
-class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin {
-    
+class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
+{
     const WEPAY_ERROR_CONFIGURATION = 101;
     const WEPAY_ERROR_CHECKOUT      = 102;
-     
-    protected   $paymentService = "wepay";
-    
-    protected   $textPrefix   = "PLG_CROWDFUNDINGPAYMENT_WEPAY";
-    protected   $debugType    = "WEPAY_PAYMENT_PLUGIN_DEBUG";
-    
+
+    protected $paymentService = "wepay";
+
+    protected $textPrefix = "PLG_CROWDFUNDINGPAYMENT_WEPAY";
+    protected $debugType = "WEPAY_PAYMENT_PLUGIN_DEBUG";
+
     /**
      * This method prepares a payment gateway - buttons, forms,...
      * That gateway will be displayed on the summary page as a payment option.
      *
-     * @param string 	$context	This string gives information about that where it has been executed the trigger.
-     * @param object 	$item	    A project data.
-     * @param JRegistry $params	    The parameters of the component
+     * @param string    $context This string gives information about that where it has been executed the trigger.
+     * @param object    $item    A project data.
+     * @param Joomla\Registry\Registry $params  The parameters of the component
+     *
+     * @return null|string
      */
-    public function onProjectPayment($context, $item, $params) {
-        
-        if(strcmp("com_crowdfunding.payment", $context) != 0){
-            return;
+    public function onProjectPayment($context, &$item, &$params)
+    {
+        if (strcmp("com_crowdfunding.payment", $context) != 0) {
+            return null;
         }
-        
+
         $app = JFactory::getApplication();
-        /** @var $app JSite **/
+        /** @var $app JApplicationSite */
 
-        if($app->isAdmin()) {
-            return;
+        if ($app->isAdmin()) {
+            return null;
         }
 
-        $doc     = JFactory::getDocument();
-        /**  @var $doc JDocumentHtml **/
-        
+        $doc = JFactory::getDocument();
+        /**  @var $doc JDocumentHtml */
+
         // Check document type
         $docType = $doc->getType();
-        if(strcmp("html", $docType) != 0){
-            return;
+        if (strcmp("html", $docType) != 0) {
+            return null;
         }
-       
+
         // Flag for error.
         $error = false;
-        
+
         // This is a URI path to the plugin folder
         $pluginURI = "plugins/crowdfundingpayment/wepay";
-        
+
         // Load the script that initialize the select element with banks.
-        if(version_compare(JVERSION, "3", ">=")) {
+        if (version_compare(JVERSION, "3", ">=")) {
             JHtml::_("jquery.framework");
         }
-        
+
         // Get intention
-        $userId        = JFactory::getUser()->id;
-        $aUserId       = $app->getUserState("auser_id");
-        
+        $userId  = JFactory::getUser()->id;
+        $aUserId = $app->getUserState("auser_id");
+
         // Create intention object
-        $intention     = $this->getIntention(array(
-            "user_id"       => $userId,
-            "auser_id"      => $aUserId,
-            "project_id"    => $item->id
+        $intention = $this->getIntention(array(
+            "user_id"    => $userId,
+            "auser_id"   => $aUserId,
+            "project_id" => $item->id
         ));
-        
-        $accountId     = (int)$this->params->get("wepay_account_id");
-        $accessToken   = JString::trim($this->params->get("wepay_access_token"));
-        $clientId      = (int)$this->params->get("wepay_client_id");
-        $clientSecret  = JString::trim($this->params->get("wepay_client_secret"));
-        
-        if(!$accountId OR !$accessToken OR !$clientId OR !$clientSecret) {
-            $error = self::WEPAY_ERROR_CONFIGURATION;
-        }
-        
-        if(!$error) { // Create checkout object
-            
-            $notifyUrl = $this->getNotifyUrl();
-            $returnUrl = $this->getReturnUrl($item->slug, $item->catslug);
-            
-            try {
-                
-                jimport("itprism.payment.wepay.libs.wepay");
-                
-                if($this->params->get("wepay_staging", 1)) {
-                    // change to useStaging for live environments
-                    Wepay::useStaging($clientId, $clientSecret);
-                } else {
-                    // change to useProduction for live environments
-                    Wepay::useProduction($clientId, $clientSecret);
-                }
-                
-                $customCertificate = (!$this->params->get("wepay_use_cacert", 0)) ? false : true;
-                
-                $wePay = new WePay($accessToken);
-                /** @var $wePay WePay **/
-                
-                // create the checkout
-                $response = $wePay->request('checkout/create', array(
-                    'account_id'        => $accountId,
-                    'amount'            => $item->amount,
-                    'short_description' => JText::sprintf($this->textPrefix."_INVESTING_IN_S", htmlentities($item->title, ENT_QUOTES, "UTF-8")),
-                    'type'              => 'DONATION',
-                    'redirect_uri'      => $returnUrl,
-                    'callback_uri'      => $notifyUrl,
-                    'mode'              => "iframe"
-                ),
-                    $customCertificate);
-                
-                // DEBUG DATA
-                JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_WEPAY_CO"), $this->debugType, $wePay) : null;
-                
-                // DEBUG DATA
-                JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_WEPAY_COR"), $this->debugType, $response) : null;
-                
-                $intentionData = array(
-                    "txn_id"    => $response->checkout_id,
-                    "gateway"   => "WePay"
-                );
-                
-                $intention->bind($intentionData);
-                $intention->store();
-                
-            } catch (Exception $e) {
-                
-                JLog::add($e->getMessage());
-                $error = self::WEPAY_ERROR_CHECKOUT;
-                
-            }
-            
-        }
-            
-        $html   =  array();
-        $html[] = '<h4><img src="'.$pluginURI.'/images/wepay_icon.png" width="32" height="32" alt="WePay" />'.JText::_($this->textPrefix."_TITLE").'</h4>';
-        
-        if(!$error) {
-                
-            $html[] = '<div class="cf-wepay-payment">';
-            
-            $html[] = '<div id="cf-wepay-payment-form">';
-            $html[] = '</div>';
-            
-            $html[] = '<div class="clearfix"></div>';
-            
-            if($this->params->get('wepay_display_info', 1)) {
-                $html[] = '<p class="sticky">'.JText::_($this->textPrefix."_INFO").'</p>';
-            }
-            
-            if($this->params->get('wepay_sandbox', 1)) {
-                $html[] = '<p class="sticky">'.JText::_($this->textPrefix."_WORKS_SANDBOX").'</p>';
-            }
-            
-            $html[] = '</div>';
-            
-            // Add scripts
-            $doc->addScript("https://www.wepay.com/min/js/iframe.wepay.js");
-            
-            $js = '
-            jQuery(document).ready(function() {
-            	WePay.iframe_checkout("cf-wepay-payment-form", "'.$response->checkout_uri.'");
-            });';
-            
-            $doc->addScriptDeclaration($js);
-            
-        } else {
-            
-            switch($error) {
-                case 101:
-                    $html[] = '<div class="alert">'.JText::_($this->textPrefix."_ERROR_CONFIGURATION").'</div>';
-                    break;
-                    
-                case 102:
-                    $html[] = '<div class="alert">'.JText::_($this->textPrefix."_ERROR_CANNOT_CREATE_CHECKOUT").'</div>';
-                    break;
-            }
-            
-        }
-        
-        return implode("\n", $html);
-        
-    }
-    
-    /**
-     * This method processes transaction data that comes from the paymetn gateway.
-     *  
-     * @param string 	$context	This string gives information about that where it has been executed the trigger.
-     * @param JRegistry $params	    The parameters of the component
-     */
-    public function onPaymenNotify($context, $params) {
-        
-        if(strcmp("com_crowdfunding.notify.wepay", $context) != 0){
-            return;
-        }
-        
-        $app = JFactory::getApplication();
-        /** @var $app JSite **/
-        
-        if($app->isAdmin()) {
-            return;
+
+        $accountId    = (int)$this->params->get("wepay_account_id");
+        $clientId     = (int)$this->params->get("wepay_client_id");
+        $clientSecret = JString::trim($this->params->get("wepay_client_secret"));
+
+        // Get access token
+        if ($this->params->get("wepay_staging", 1)) { // Staging server access token.
+            $accessToken  = JString::trim($this->params->get("wepay_staging_access_token"));
+        } else {// Live server access token.
+            $accessToken  = JString::trim($this->params->get("wepay_access_token"));
         }
 
-        $doc     = JFactory::getDocument();
-        /**  @var $doc JDocumentHtml **/
-        
+        if (!$accountId or !$accessToken or !$clientId or !$clientSecret) {
+            $error = self::WEPAY_ERROR_CONFIGURATION;
+        }
+
+        if (!$error) { // Create checkout object
+
+            $notifyUrl = $this->getNotifyUrl();
+            $returnUrl = $this->getReturnUrl($item->slug, $item->catslug);
+
+            try {
+
+                jimport("itprism.payment.wepay.libs.wepay");
+
+                if ($this->params->get("wepay_staging", 1)) {
+                    Wepay::useStaging($clientId, $clientSecret);
+                } else {
+                    Wepay::useProduction($clientId, $clientSecret);
+                }
+
+                $customCertificate = (!$this->params->get("wepay_use_cacert", 0)) ? false : true;
+
+                $wePay = new WePay($accessToken);
+                /** @var $wePay WePay */
+
+                // create the checkout
+                $response = $wePay->request(
+                    'checkout/create',
+                    array(
+                        'account_id'        => $accountId,
+                        'amount'            => $item->amount,
+                        'short_description' => JText::sprintf($this->textPrefix . "_INVESTING_IN_S", htmlentities($item->title, ENT_QUOTES, "UTF-8")),
+                        'type'              => 'DONATION',
+                        'redirect_uri'      => $returnUrl,
+                        'callback_uri'      => $notifyUrl,
+                        'mode'              => "iframe",
+                        'fee_payer'         => "payee"
+                    ),
+                    $customCertificate
+                );
+
+                // DEBUG DATA
+                JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_WEPAY_CO"), $this->debugType, $wePay) : null;
+
+                // DEBUG DATA
+                JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_WEPAY_COR"), $this->debugType, $response) : null;
+
+                $intentionData = array(
+                    "txn_id"  => $response->checkout_id,
+                    "gateway" => "WePay"
+                );
+
+                $intention->bind($intentionData);
+                $intention->store();
+
+            } catch (Exception $e) {
+
+                JLog::add($e->getMessage());
+                $error = self::WEPAY_ERROR_CHECKOUT;
+            }
+        }
+
+        $html   = array();
+        $html[] = '<h4><img src="' . $pluginURI . '/images/wepay_icon.png" width="32" height="32" alt="WePay" />' . JText::_($this->textPrefix . "_TITLE") . '</h4>';
+
+        if (!$error) {
+
+            $html[] = '<div class="cf-wepay-payment">';
+
+            $html[] = '<div id="cf-wepay-payment-form">';
+            $html[] = '</div>';
+
+            $html[] = '<div class="clearfix"></div>';
+
+            if ($this->params->get('wepay_display_info', 1)) {
+                $html[] = '<p class="sticky">' . JText::_($this->textPrefix . "_INFO") . '</p>';
+            }
+
+            if ($this->params->get('wepay_sandbox', 1)) {
+                $html[] = '<p class="sticky">' . JText::_($this->textPrefix . "_WORKS_SANDBOX") . '</p>';
+            }
+
+            $html[] = '</div>';
+
+            // Add scripts
+            $doc->addScript("https://www.wepay.com/min/js/iframe.wepay.js");
+
+            $js = '
+            jQuery(document).ready(function() {
+            	WePay.iframe_checkout("cf-wepay-payment-form", "' . $response->checkout_uri . '");
+            });';
+
+            $doc->addScriptDeclaration($js);
+
+        } else {
+
+            switch ($error) {
+                case 101:
+                    $html[] = '<div class="alert">' . JText::_($this->textPrefix . "_ERROR_CONFIGURATION") . '</div>';
+                    break;
+
+                case 102:
+                    $html[] = '<div class="alert">' . JText::_($this->textPrefix . "_ERROR_CANNOT_CREATE_CHECKOUT") . '</div>';
+                    break;
+            }
+
+        }
+
+        return implode("\n", $html);
+
+    }
+
+    /**
+     * This method processes transaction data that comes from the paymetn gateway.
+     *
+     * @param string    $context This string gives information about that where it has been executed the trigger.
+     * @param Joomla\Registry\Registry $params  The parameters of the component
+     *
+     * @return null|array
+     */
+    public function onPaymenNotify($context, &$params)
+    {
+        if (strcmp("com_crowdfunding.notify.wepay", $context) != 0) {
+            return null;
+        }
+
+        $app = JFactory::getApplication();
+        /** @var $app JApplicationSite */
+
+        if ($app->isAdmin()) {
+            return null;
+        }
+
+        $doc = JFactory::getDocument();
+        /**  @var $doc JDocumentHtml * */
+
         // Check document type
         $docType = $doc->getType();
-        if(strcmp("raw", $docType) != 0){
-            return;
+        if (strcmp("raw", $docType) != 0) {
+            return null;
         }
-       
+
         // Validate request method
         $requestMethod = $app->input->getMethod();
-        if(strcmp("POST", $requestMethod) != 0) {
+        if (strcmp("POST", $requestMethod) != 0) {
             $this->log->add(
-                JText::_($this->textPrefix."_ERROR_INVALID_REQUEST_METHOD"),
+                JText::_($this->textPrefix . "_ERROR_INVALID_REQUEST_METHOD"),
                 "WEPAY_PAYMENT_PLUGIN_ERROR",
-                JText::sprintf($this->textPrefix."_ERROR_INVALID_TRANSACTION_REQUEST_METHOD", $requestMethod)
+                JText::sprintf($this->textPrefix . "_ERROR_INVALID_TRANSACTION_REQUEST_METHOD", $requestMethod)
             );
+
             return null;
         }
-        
+
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_RESPONSE"), $this->debugType, $_POST) : null;
-        
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_RESPONSE"), $this->debugType, $_POST) : null;
+
         // Get checkout ID
-        $checkoutId      = $app->input->get("checkout_id");
-        if(!$checkoutId) {
+        $checkoutId = $app->input->get("checkout_id");
+        if (!$checkoutId) {
             $this->log->add(
-                JText::_($this->textPrefix."_ERROR_INVALID_CHECKOUT_ID"),
+                JText::_($this->textPrefix . "_ERROR_INVALID_CHECKOUT_ID"),
                 "WEPAY_PAYMENT_PLUGIN_ERROR"
             );
+
             return null;
         }
-        
+
         // Prepare the array that will be returned by this method
         $result = array(
-        	"project"          => null, 
-        	"reward"           => null, 
-        	"transaction"      => null,
-            "payment_service"  => "wepay"
+            "project"         => null,
+            "reward"          => null,
+            "transaction"     => null,
+            "payment_service" => "wepay"
         );
-        
+
         // Get currency
         jimport("crowdfunding.currency");
-        $currencyId      = $params->get("project_currency");
-        $currency        = CrowdFundingCurrency::getInstance(JFactory::getDbo(), $currencyId);
-        
+        $currencyId = $params->get("project_currency");
+        $currency   = CrowdFundingCurrency::getInstance(JFactory::getDbo(), $currencyId);
+
         // Get intention data
         $keys = array(
             "txn_id" => $checkoutId
         );
         jimport("crowdfunding.intention");
-        $intention     = new CrowdFundingIntention($keys);
-        
+        $intention = new CrowdFundingIntention(JFactory::getDbo());
+        $intention->load($keys);
+
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_INTENTION"), $this->debugType, $intention->getProperties()) : null;
-        
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_INTENTION"), $this->debugType, $intention->getProperties()) : null;
+
         // Validate the payment gateway.
-        if(!$this->isWePayGateway($intention)) {
+        if (!$this->isWePayGateway($intention)) {
             $this->log->add(
-                JText::_($this->textPrefix."_ERROR_INVALID_PAYMENT_GATEWAY"),
+                JText::_($this->textPrefix . "_ERROR_INVALID_PAYMENT_GATEWAY"),
                 "WEPAY_PAYMENT_PLUGIN_ERROR",
                 array("INTENTION" => $intention->getProperties())
             );
+
             return null;
         }
-        
-        $accountId     = (int)$this->params->get("wepay_account_id");
-        $accessToken   = JString::trim($this->params->get("wepay_access_token"));
-        $clientId      = (int)$this->params->get("wepay_client_id");
-        $clientSecret  = JString::trim($this->params->get("wepay_client_secret"));
-        
+
         jimport("itprism.payment.wepay.libs.wepay");
-        
-        if($this->params->get("wepay_staging", 1)) {
-            // change to useStaging for live environments
+
+        $clientId     = (int)$this->params->get("wepay_client_id");
+        $clientSecret = JString::trim($this->params->get("wepay_client_secret"));
+
+        // Get access token
+        if ($this->params->get("wepay_staging", 1)) { // Staging server access token.
+
+            $accessToken  = JString::trim($this->params->get("wepay_staging_access_token"));
             Wepay::useStaging($clientId, $clientSecret);
-        } else {
-            // change to useProduction for live environments
+
+        } else {// Live server access token.
+
+            $accessToken  = JString::trim($this->params->get("wepay_access_token"));
             Wepay::useProduction($clientId, $clientSecret);
+
         }
-        
+
         $customCertificate = (!$this->params->get("wepay_use_cacert", 0)) ? false : true;
-        
+
         $wePay = new WePay($accessToken);
-        /** @var $wePay WePay **/
-        
+        /** @var $wePay WePay */
+
         try {
-            
+
             $requestParams = array(
                 'checkout_id' => $checkoutId,
             );
-            
+
             // Get data about the checkout
             $response = $wePay->request('checkout', $requestParams, $customCertificate);
-        
+
             // DEBUG DATA
-            JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_WEPAY_CHECKOUT"), $this->debugType, $wePay) : null;
-            
+            JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_WEPAY_CHECKOUT"), $this->debugType, $wePay) : null;
+
             // DEBUG DATA
-            JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_WEPAY_COR"), $this->debugType, $response) : null;
-            
+            JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_WEPAY_COR"), $this->debugType, $response) : null;
+
         } catch (Exception $e) {
-        
+
             // Log error
             $this->log->add(
-                JText::_($this->textPrefix."_ERROR_CHECKOUT_REQUEST"), 
-                "WEPAY_PAYMENT_PLUGIN_ERROR", 
+                JText::_($this->textPrefix . "_ERROR_CHECKOUT_REQUEST"),
+                "WEPAY_PAYMENT_PLUGIN_ERROR",
                 $e->getMessage()
             );
-            
-			return $result;
-        
+
+            return $result;
+
         }
-        
+
         $response = JArrayHelper::fromObject($response);
-        
+
         // Validate transaction data
         $validData = $this->validateData($response, $currency->getAbbr(), $intention);
-        if(is_null($validData)) {
+        if (is_null($validData)) {
             return $result;
         }
-        
+
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_VALID_DATA"), $this->debugType, $validData) : null;
-        
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_VALID_DATA"), $this->debugType, $validData) : null;
+
         // Get project
         jimport("crowdfunding.project");
         $projectId = JArrayHelper::getValue($validData, "project_id");
-        $project   = CrowdFundingProject::getInstance($projectId);
-        
+        $project   = CrowdFundingProject::getInstance(JFactory::getDbo(), $projectId);
+
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_PROJECT_OBJECT"), $this->debugType, $project->getProperties()) : null;
-        
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_PROJECT_OBJECT"), $this->debugType, $project->getProperties()) : null;
+
         // Check for valid project
-        if(!$project->getId()) {
-            $error  = JText::_($this->textPrefix."_ERROR_INVALID_PROJECT");
-            $error .= "\n". JText::sprintf($this->textPrefix."_TRANSACTION_DATA", var_export($validData, true));
-			JLog::add($error);
-			return $result;
+        if (!$project->getId()) {
+            $error = JText::_($this->textPrefix . "_ERROR_INVALID_PROJECT");
+            $error .= "\n" . JText::sprintf($this->textPrefix . "_TRANSACTION_DATA", var_export($validData, true));
+            JLog::add($error);
+
+            return $result;
         }
-        
+
         // Set the receiver of funds
         $validData["receiver_id"] = $project->getUserId();
-        
+
         // Save transaction data.
         // If it is not completed, return empty results.
         // If it is complete, continue with process transaction data
-        if(!$this->storeTransaction($validData, $project)) {
+        $transactionData = $this->storeTransaction($validData, $project);
+        if (is_null($transactionData)) {
             return $result;
         }
-        
-        // Validate and Update distributed value of the reward
-        $rewardId  = JArrayHelper::getValue($validData, "reward_id");
-        $reward    = null;
-        if(!empty($rewardId)) {
-            $reward = $this->updateReward($validData);
+
+        // Update the number of distributed reward.
+        $rewardId = JArrayHelper::getValue($transactionData, "reward_id");
+        $reward   = null;
+        if (!empty($rewardId)) {
+            $reward = $this->updateReward($transactionData);
+
+            // Validate the reward.
+            if (!$reward) {
+                $transactionData["reward_id"] = 0;
+            }
         }
-        
+
         //  Prepare the data that will be returned
-        
-        $result["transaction"]    = JArrayHelper::toObject($validData);
-        
+
+        $result["transaction"] = JArrayHelper::toObject($transactionData);
+
         // Generate object of data based on the project properties
-        $properties               = $project->getProperties();
-        $result["project"]        = JArrayHelper::toObject($properties);
-        
+        $properties        = $project->getProperties();
+        $result["project"] = JArrayHelper::toObject($properties);
+
         // Generate object of data based on the reward properties
-        if(!empty($reward)) {
-            $properties           = $reward->getProperties();
-            $result["reward"]     = JArrayHelper::toObject($properties);
+        if (!empty($reward)) {
+            $properties       = $reward->getProperties();
+            $result["reward"] = JArrayHelper::toObject($properties);
         }
-        
+
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_RESULT_DATA"), $this->debugType, $result) : null;
-        
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_RESULT_DATA"), $this->debugType, $result) : null;
+
         // Remove intention
         $intention->delete();
         unset($intention);
-        
+
         return $result;
-                
+
     }
-    
+
     /**
      * This metod is executed after complete payment.
      * It is used to be sent mails to user and administrator
-     * 
-     * @param stdObject  Transaction data
-     * @param JRegistry  Component parameters
-     * @param stdObject  Project data
-     * @param stdObject  Reward data
+     *
+     * @param string $context
+     * @param object $transaction Transaction data
+     * @param Joomla\Registry\Registry $params Component parameters
+     * @param object $project Project data
+     * @param object $reward Reward data
+     *
+     * @return void
      */
-    public function onAfterPayment($context, &$transaction, $params, $project, $reward) {
-        
-        if(strcmp("com_crowdfunding.notify.wepay", $context) != 0){
-            return;
-        }
-        
-        $app = JFactory::getApplication();
-        /** @var $app JSite **/
-        
-        if($app->isAdmin()) {
+    public function onAfterPayment($context, &$transaction, &$params, &$project, &$reward)
+    {
+        if (strcmp("com_crowdfunding.notify.wepay", $context) != 0) {
             return;
         }
 
-        $doc     = JFactory::getDocument();
-        /**  @var $doc JDocumentHtml **/
-        
-        // Check document type
-        $docType = $doc->getType();
-        if(strcmp("raw", $docType) != 0){
+        $app = JFactory::getApplication();
+        /** @var $app JApplicationSite */
+
+        if ($app->isAdmin()) {
             return;
         }
-       
+
+        $doc = JFactory::getDocument();
+        /**  @var $doc JDocumentHtml */
+
+        // Check document type
+        $docType = $doc->getType();
+        if (strcmp("raw", $docType) != 0) {
+            return;
+        }
+
         // Send mails
-        $this->sendMails($project, $transaction);
-        
+        $this->sendMails($project, $transaction, $params);
     }
-    
-	/**
-     * Validate transaction
-     * 
-     * @param array $data
+
+    /**
+     * Validate transaction data.
+     *
+     * @param array  $data
      * @param string $currency
-     * @param array $intention
+     * @param CrowdFundingIntention  $intention
+     *
+     * @return array
      */
-    protected function validateData($data, $currency, $intention) {
-        
+    protected function validateData($data, $currency, $intention)
+    {
         $timesamp = JArrayHelper::getValue($data, "create_time");
         $date     = new JDate($timesamp);
-        
-        // Prepare extra data
+
+        // Prepare extra data.
         $extraData = array(
-            "account_id"    => JArrayHelper::getValue($data, "account_id"),
-            "type"          => JArrayHelper::getValue($data, "type"),
-            "fee_payer"     => JArrayHelper::getValue($data, "fee_payer"),
-            "state"         => JArrayHelper::getValue($data, "state"),
-            "auto_capture"  => JArrayHelper::getValue($data, "auto_capture"),
-            "app_fee"       => JArrayHelper::getValue($data, "app_fee"),
-            "create_time"   => JArrayHelper::getValue($data, "create_time"),
-            "mode"          => JArrayHelper::getValue($data, "mode"),
-            "gross"         => JArrayHelper::getValue($data, "gross"),
-            "fee"           => JArrayHelper::getValue($data, "fee"),
-            "tax"           => JArrayHelper::getValue($data, "tax")
+            "account_id"   => JArrayHelper::getValue($data, "account_id"),
+            "type"         => JArrayHelper::getValue($data, "type"),
+            "fee_payer"    => JArrayHelper::getValue($data, "fee_payer"),
+            "state"        => JArrayHelper::getValue($data, "state"),
+            "auto_capture" => JArrayHelper::getValue($data, "auto_capture"),
+            "app_fee"      => JArrayHelper::getValue($data, "app_fee"),
+            "create_time"  => JArrayHelper::getValue($data, "create_time"),
+            "mode"         => JArrayHelper::getValue($data, "mode"),
+            "gross"        => JArrayHelper::getValue($data, "gross"),
+            "fee"          => JArrayHelper::getValue($data, "fee"),
+            "tax"          => JArrayHelper::getValue($data, "tax")
         );
-        
-        // Prepare transaction status
+
+        // Prepare transaction status.
         $txnState = JArrayHelper::getValue($data, "state");
-        if(strcmp("captured", $txnState) == 0) {
+        if (strcmp("captured", $txnState) == 0) {
             $txnState = "completed";
         } else {
             $txnState = "pending";
         }
-        
-        // Prepare transaction data
+
+        // Prepare transaction data.
         $transaction = array(
-            "investor_id"		     => $intention->getUserId(),
-            "project_id"		     => $intention->getProjectId(),
-            "reward_id"			     => ($intention->isAnonymous()) ? 0 : $intention->getRewardId(),
-        	"txn_id"                 => JArrayHelper::getValue($data, "checkout_id"),
-        	"txn_amount"		     => JArrayHelper::getValue($data, "amount"),
-            "txn_currency"           => $currency,
-            "txn_status"             => $txnState,
-            "txn_date"               => $date->toSql(),
-            "extra_data"             => $extraData,
-            "service_provider"       => "WePay",
-        ); 
-        
-        // Check User Id, Project ID and Transaction ID
-        if(!$transaction["project_id"] OR !$transaction["txn_id"]) {
+            "investor_id"      => $intention->getUserId(),
+            "project_id"       => $intention->getProjectId(),
+            "reward_id"        => ($intention->isAnonymous()) ? 0 : $intention->getRewardId(),
+            "txn_id"           => JArrayHelper::getValue($data, "checkout_id"),
+            "txn_amount"       => JArrayHelper::getValue($data, "amount"),
+            "txn_currency"     => $currency,
+            "txn_status"       => $txnState,
+            "txn_date"         => $date->toSql(),
+            "extra_data"       => $extraData,
+            "service_provider" => "WePay",
+        );
+
+        // Check User Id, Project ID and Transaction ID.
+        if (!$transaction["project_id"] or !$transaction["txn_id"]) {
             // Log data in the database
             $this->log->add(
-                JText::_($this->textPrefix."_ERROR_INVALID_TRANSACTION_DATA"),
+                JText::_($this->textPrefix . "_ERROR_INVALID_TRANSACTION_DATA"),
                 "WEPAY_PAYMENT_PLUGIN_ERROR",
                 $transaction
             );
+
             return null;
         }
-        
+
         return $transaction;
     }
-    
+
     /**
      * Save transaction
-     * 
-     * @param array               $data
+     *
+     * @param array               $transactionData
      * @param CrowdFundingProject $project
-     * 
-     * @return boolean
+     *
+     * @return null|array
      */
-    protected function storeTransaction($data, $project) {
-        
+    protected function storeTransaction($transactionData, $project)
+    {
         // Get transaction by txn ID
         jimport("crowdfunding.transaction");
-        $keys = array(
-            "txn_id" => JArrayHelper::getValue($data, "txn_id")
+        $keys        = array(
+            "txn_id" => JArrayHelper::getValue($transactionData, "txn_id")
         );
-        $transaction = new CrowdFundingTransaction($keys);
-        
+        $transaction = new CrowdFundingTransaction(JFactory::getDbo());
+        $transaction->load($keys);
+
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_TRANSACTION_OBJECT"), $this->debugType, $transaction->getProperties()) : null;
-        
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_TRANSACTION_OBJECT"), $this->debugType, $transaction->getProperties()) : null;
+
         // Check for existed transaction
-        if($transaction->getId()) {
-            
+        if ($transaction->getId()) {
+
             // If the current status if completed,
             // stop the process.
-            if($transaction->isCompleted()) {
-                return false;
-            } 
-            
+            if ($transaction->isCompleted()) {
+                return null;
+            }
+
         }
 
         // Encode extra data
-        if(!empty($data["extra_data"])) {
-            $data["extra_data"] = json_encode($data["extra_data"]);
+        if (!empty($transactionData["extra_data"])) {
+            $transactionData["extra_data"] = json_encode($transactionData["extra_data"]);
         } else {
-            $data["extra_data"] = null;
+            $transactionData["extra_data"] = null;
         }
-        
+
         // Store the new transaction data.
-        $transaction->bind($data);
-        $transaction->store(true);
-        
-        $txnStatus = JArrayHelper::getValue($data, "txn_status");
-        
+        $transaction->bind($transactionData);
+        $transaction->store();
+
+        // Set transaction ID.
+        $transactionData["id"] = $transaction->getId();
+
         // If it is not completed (it might be pending or other status),
-        // stop the process. Only completed transaction will continue 
+        // stop the process. Only completed transaction will continue
         // and will process the project, rewards,...
-        if(!$transaction->isCompleted()) {
-            return false;
+        if (!$transaction->isCompleted()) {
+            return null;
         }
-        
-        // If the new transaction is completed, 
+
+
         // update project funded amount.
-        $amount = JArrayHelper::getValue($data, "txn_amount");
+        $amount = JArrayHelper::getValue($transactionData, "txn_amount");
         $project->addFunds($amount);
-        $project->store();
-        
-        return true;
+        $project->updateFunds();
+
+        return $transactionData;
     }
-    
-    
-    protected function getNotifyUrl($html = true) {
-        
+
+
+    protected function getNotifyUrl()
+    {
         $page = JString::trim($this->params->get('wepay_notify_url'));
-        
-        $uri        = JURI::getInstance();
-        $domain     = $uri->toString(array("host"));
-        
-        if( false == strpos($page, $domain) ) {
-            $page = JURI::root().str_replace("&", "&amp;", $page);
+
+        $uri    = JURI::getInstance();
+        $domain = $uri->toString(array("host"));
+
+        if (false == strpos($page, $domain)) {
+            $page = JURI::root() . str_replace("&", "&amp;", $page);
         }
-        
-        if(false === strpos($page, "payment_service=wepay")) {
+
+        if (false === strpos($page, "payment_service=wepay")) {
             $page .= "&amp;payment_service=wepay";
         }
-        
+
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_NOTIFY_URL"), $this->debugType, $page) : null;
-        
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_NOTIFY_URL"), $this->debugType, $page) : null;
+
         return $page;
-        
     }
-    
-    protected function getReturnUrl($slug, $catslug) {
-        
+
+    protected function getReturnUrl($slug, $catslug)
+    {
         $returnPage = JString::trim($this->params->get('wepay_return_url'));
-        if(!$returnPage) {
+        if (!$returnPage) {
             $uri        = JURI::getInstance();
-            $returnPage = $uri->toString(array("scheme", "host")).JRoute::_(CrowdFundingHelperRoute::getBackingRoute($slug, $catslug, "share"), false);
-        } 
-        
+            $returnPage = $uri->toString(array("scheme", "host")) . JRoute::_(CrowdFundingHelperRoute::getBackingRoute($slug, $catslug, "share"), false);
+        }
+
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix."_DEBUG_RETURN_URL"), $this->debugType, $returnPage) : null;
-        
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_RETURN_URL"), $this->debugType, $returnPage) : null;
+
         return $returnPage;
-        
     }
-    
-    protected function isWePayGateway($intention) {
-        
+
+    /**
+     * @param CrowdFundingIntention $intention
+     *
+     * @return bool
+     */
+    protected function isWePayGateway($intention)
+    {
         $gateway = $intention->getGateway();
 
-        if(strcmp("WePay", $gateway) != 0 ) {
+        if (strcmp("WePay", $gateway) != 0) {
             return false;
         }
-        
+
         return true;
     }
-    
 }
