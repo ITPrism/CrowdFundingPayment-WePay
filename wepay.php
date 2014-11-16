@@ -67,12 +67,10 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
         $pluginURI = "plugins/crowdfundingpayment/wepay";
 
         // Load the script that initialize the select element with banks.
-        if (version_compare(JVERSION, "3", ">=")) {
-            JHtml::_("jquery.framework");
-        }
+        JHtml::_("jquery.framework");
 
         // Get intention
-        $userId  = JFactory::getUser()->id;
+        $userId  = JFactory::getUser()->get("id");
         $aUserId = $app->getUserState("auser_id");
 
         // Create intention object
@@ -140,8 +138,8 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
                 JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_WEPAY_COR"), $this->debugType, $response) : null;
 
                 $intentionData = array(
-                    "txn_id"  => $response->checkout_id,
-                    "gateway" => "WePay"
+                    "unique_key" => $response->checkout_id,
+                    "gateway"    => "WePay"
                 );
 
                 $intention->bind($intentionData);
@@ -212,7 +210,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
      *
      * @return null|array
      */
-    public function onPaymenNotify($context, &$params)
+    public function onPaymentNotify($context, &$params)
     {
         if (strcmp("com_crowdfunding.notify.wepay", $context) != 0) {
             return null;
@@ -226,7 +224,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
         }
 
         $doc = JFactory::getDocument();
-        /**  @var $doc JDocumentHtml * */
+        /**  @var $doc JDocumentHtml */
 
         // Check document type
         $docType = $doc->getType();
@@ -265,6 +263,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
             "project"         => null,
             "reward"          => null,
             "transaction"     => null,
+            "payment_session" => null,
             "payment_service" => "wepay"
         );
 
@@ -275,7 +274,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
 
         // Get intention data
         $keys = array(
-            "txn_id" => $checkoutId
+            "unique_key" => $checkoutId
         );
         jimport("crowdfunding.intention");
         $intention = new CrowdFundingIntention(JFactory::getDbo());
@@ -410,6 +409,10 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
             $properties       = $reward->getProperties();
             $result["reward"] = JArrayHelper::toObject($properties);
         }
+
+        // Generate data object, based on the intention properties.
+        $properties       = $intention->getProperties();
+        $result["payment_session"] = JArrayHelper::toObject($properties);
 
         // DEBUG DATA
         JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_RESULT_DATA"), $this->debugType, $result) : null;
