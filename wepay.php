@@ -3,7 +3,7 @@
  * @package      CrowdFunding
  * @subpackage   Plugins
  * @author       Todor Iliev
- * @copyright    Copyright (C) 2014 Todor Iliev <todor@itprism.com>. All rights reserved.
+ * @copyright    Copyright (C) 2015 Todor Iliev <todor@itprism.com>. All rights reserved.
  * @license      http://www.gnu.org/copyleft/gpl.html GNU/GPL
  */
 
@@ -23,10 +23,20 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
     const WEPAY_ERROR_CONFIGURATION = 101;
     const WEPAY_ERROR_CHECKOUT      = 102;
 
-    protected $paymentService = "wepay";
+    protected $paymentService       = "wepay";
 
-    protected $textPrefix = "PLG_CROWDFUNDINGPAYMENT_WEPAY";
-    protected $debugType = "WEPAY_PAYMENT_PLUGIN_DEBUG";
+    protected $textPrefix           = "PLG_CROWDFUNDINGPAYMENT_WEPAY";
+    protected $debugType            = "WEPAY_PAYMENT_PLUGIN_DEBUG";
+
+    protected $extraDataKeys        = array(
+        "account_id", "type", "fee_payer", "state", "auto_capture", "app_fee",
+        "app_fee", "create_time", "mode", "gross", "fee", "tax"
+    );
+
+    /**
+     * @var JApplicationSite
+     */
+    protected $app;
 
     /**
      * This method prepares a payment gateway - buttons, forms,...
@@ -44,10 +54,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
             return null;
         }
 
-        $app = JFactory::getApplication();
-        /** @var $app JApplicationSite */
-
-        if ($app->isAdmin()) {
+        if ($this->app->isAdmin()) {
             return null;
         }
 
@@ -71,7 +78,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
 
         // Get intention
         $userId  = JFactory::getUser()->get("id");
-        $aUserId = $app->getUserState("auser_id");
+        $aUserId = $this->app->getUserState("auser_id");
 
         // Create intention object
         $intention = $this->getIntention(array(
@@ -97,8 +104,12 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
 
         if (!$error) { // Create checkout object
 
-            $notifyUrl = $this->getNotifyUrl();
+            $notifyUrl = $this->getCallbackUrl();
             $returnUrl = $this->getReturnUrl($item->slug, $item->catslug);
+
+            // DEBUG DATA
+            JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_NOTIFY_URL"), $this->debugType, $notifyUrl) : null;
+            JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_RETURN_URL"), $this->debugType, $returnUrl) : null;
 
             try {
 
@@ -126,7 +137,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
                         'redirect_uri'      => $returnUrl,
                         'callback_uri'      => $notifyUrl,
                         'mode'              => "iframe",
-                        'fee_payer'         => "payee"
+                        'fee_payer'         => $this->params->get("fees_payer", "payee")
                     ),
                     $customCertificate
                 );
@@ -153,6 +164,8 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
         }
 
         $html   = array();
+        $html[] = '<div class="well">'; // Open "well".
+
         $html[] = '<h4><img src="' . $pluginURI . '/images/wepay_icon.png" width="32" height="32" alt="WePay" />' . JText::_($this->textPrefix . "_TITLE") . '</h4>';
 
         if (!$error) {
@@ -165,11 +178,11 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
             $html[] = '<div class="clearfix"></div>';
 
             if ($this->params->get('wepay_display_info', 1)) {
-                $html[] = '<p class="sticky">' . JText::_($this->textPrefix . "_INFO") . '</p>';
+                $html[] = '<p class="alert alert-info"><i class="icon-info-sign"></i>' . JText::_($this->textPrefix . "_INFO") . '</p>';
             }
 
             if ($this->params->get('wepay_sandbox', 1)) {
-                $html[] = '<p class="sticky">' . JText::_($this->textPrefix . "_WORKS_SANDBOX") . '</p>';
+                $html[] = '<p class="alert alert-info"><i class="icon-info-sign"></i>' . JText::_($this->textPrefix . "_WORKS_SANDBOX") . '</p>';
             }
 
             $html[] = '</div>';
@@ -198,6 +211,8 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
 
         }
 
+        $html[] = '</div>'; // Close "well".
+
         return implode("\n", $html);
 
     }
@@ -216,10 +231,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
             return null;
         }
 
-        $app = JFactory::getApplication();
-        /** @var $app JApplicationSite */
-
-        if ($app->isAdmin()) {
+        if ($this->app->isAdmin()) {
             return null;
         }
 
@@ -233,7 +245,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
         }
 
         // Validate request method
-        $requestMethod = $app->input->getMethod();
+        $requestMethod = $this->app->input->getMethod();
         if (strcmp("POST", $requestMethod) != 0) {
             $this->log->add(
                 JText::_($this->textPrefix . "_ERROR_INVALID_REQUEST_METHOD"),
@@ -248,7 +260,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
         JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_RESPONSE"), $this->debugType, $_POST) : null;
 
         // Get checkout ID
-        $checkoutId = $app->input->get("checkout_id");
+        $checkoutId = $this->app->input->get("checkout_id");
         if (!$checkoutId) {
             $this->log->add(
                 JText::_($this->textPrefix . "_ERROR_INVALID_CHECKOUT_ID"),
@@ -264,7 +276,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
             "reward"          => null,
             "transaction"     => null,
             "payment_session" => null,
-            "payment_service" => "wepay"
+            "payment_service" => $this->paymentService
         );
 
         // Get currency
@@ -284,7 +296,8 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
         JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_INTENTION"), $this->debugType, $intention->getProperties()) : null;
 
         // Validate the payment gateway.
-        if (!$this->isWePayGateway($intention)) {
+        $gateway = $intention->getGateway();
+        if (!$this->isValidPaymentGateway($gateway)) {
             $this->log->add(
                 JText::_($this->textPrefix . "_ERROR_INVALID_PAYMENT_GATEWAY"),
                 "WEPAY_PAYMENT_PLUGIN_ERROR",
@@ -434,19 +447,17 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
      * @param Joomla\Registry\Registry $params Component parameters
      * @param object $project Project data
      * @param object $reward Reward data
+     * @param object $paymentSession Payment session data.
      *
      * @return void
      */
-    public function onAfterPayment($context, &$transaction, &$params, &$project, &$reward)
+    public function onAfterPayment($context, &$transaction, &$params, &$project, &$reward, &$paymentSession)
     {
         if (strcmp("com_crowdfunding.notify.wepay", $context) != 0) {
             return;
         }
 
-        $app = JFactory::getApplication();
-        /** @var $app JApplicationSite */
-
-        if ($app->isAdmin()) {
+        if ($this->app->isAdmin()) {
             return;
         }
 
@@ -477,27 +488,21 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
         $timesamp = JArrayHelper::getValue($data, "create_time");
         $date     = new JDate($timesamp);
 
-        // Prepare extra data.
-        $extraData = array(
-            "account_id"   => JArrayHelper::getValue($data, "account_id"),
-            "type"         => JArrayHelper::getValue($data, "type"),
-            "fee_payer"    => JArrayHelper::getValue($data, "fee_payer"),
-            "state"        => JArrayHelper::getValue($data, "state"),
-            "auto_capture" => JArrayHelper::getValue($data, "auto_capture"),
-            "app_fee"      => JArrayHelper::getValue($data, "app_fee"),
-            "create_time"  => JArrayHelper::getValue($data, "create_time"),
-            "mode"         => JArrayHelper::getValue($data, "mode"),
-            "gross"        => JArrayHelper::getValue($data, "gross"),
-            "fee"          => JArrayHelper::getValue($data, "fee"),
-            "tax"          => JArrayHelper::getValue($data, "tax")
-        );
-
         // Prepare transaction status.
         $txnState = JArrayHelper::getValue($data, "state");
-        if (strcmp("captured", $txnState) == 0) {
-            $txnState = "completed";
-        } else {
-            $txnState = "pending";
+        switch ($txnState) {
+            case "captured":
+                $txnState = "completed";
+                break;
+            case "failed":
+                $txnState = "failed";
+                break;
+            case "canceled":
+                $txnState = "canceled";
+                break;
+            default:
+                $txnState = "pending";
+                break;
         }
 
         // Prepare transaction data.
@@ -510,7 +515,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
             "txn_currency"     => $currency,
             "txn_status"       => $txnState,
             "txn_date"         => $date->toSql(),
-            "extra_data"       => $extraData,
+            "extra_data"       => $this->prepareExtraData($data),
             "service_provider" => "WePay",
         );
 
@@ -561,11 +566,13 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
 
         }
 
-        // Encode extra data
-        if (!empty($transactionData["extra_data"])) {
-            $transactionData["extra_data"] = json_encode($transactionData["extra_data"]);
-        } else {
-            $transactionData["extra_data"] = null;
+        // Add extra data.
+        if (isset($transactionData["extra_data"])) {
+            if (!empty($transactionData["extra_data"])) {
+                $transaction->addExtraData($transactionData["extra_data"]);
+            }
+
+            unset($transactionData["extra_data"]);
         }
 
         // Store the new transaction data.
@@ -582,64 +589,11 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
             return null;
         }
 
-
         // update project funded amount.
         $amount = JArrayHelper::getValue($transactionData, "txn_amount");
         $project->addFunds($amount);
         $project->updateFunds();
 
         return $transactionData;
-    }
-
-
-    protected function getNotifyUrl()
-    {
-        $page = JString::trim($this->params->get('wepay_notify_url'));
-
-        $uri    = JURI::getInstance();
-        $domain = $uri->toString(array("host"));
-
-        if (false == strpos($page, $domain)) {
-            $page = JURI::root() . str_replace("&", "&amp;", $page);
-        }
-
-        if (false === strpos($page, "payment_service=wepay")) {
-            $page .= "&amp;payment_service=wepay";
-        }
-
-        // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_NOTIFY_URL"), $this->debugType, $page) : null;
-
-        return $page;
-    }
-
-    protected function getReturnUrl($slug, $catslug)
-    {
-        $returnPage = JString::trim($this->params->get('wepay_return_url'));
-        if (!$returnPage) {
-            $uri        = JURI::getInstance();
-            $returnPage = $uri->toString(array("scheme", "host")) . JRoute::_(CrowdFundingHelperRoute::getBackingRoute($slug, $catslug, "share"), false);
-        }
-
-        // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_RETURN_URL"), $this->debugType, $returnPage) : null;
-
-        return $returnPage;
-    }
-
-    /**
-     * @param CrowdFundingIntention $intention
-     *
-     * @return bool
-     */
-    protected function isWePayGateway($intention)
-    {
-        $gateway = $intention->getGateway();
-
-        if (strcmp("WePay", $gateway) != 0) {
-            return false;
-        }
-
-        return true;
     }
 }

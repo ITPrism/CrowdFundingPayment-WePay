@@ -2,26 +2,25 @@
 <extension version="3.3" type="plugin" group="crowdfundingpayment" method="upgrade">
     <name>PLG_CROWDFUNDINGPAYMENT_WEPAY</name>
     <author>Todor Iliev</author>
-    <copyright>Copyright (C) 2014 Todor Iliev ( ITPrism.com ). All rights reserved.</copyright>
+    <copyright>Copyright (C) 2015 Todor Iliev ( ITPrism.com ). All rights reserved.</copyright>
     <license>http://www.gnu.org/copyleft/gpl.html GNU/GPL</license>
     <authorEmail>todor@itprism.com</authorEmail>
     <authorUrl>http://itprism.com</authorUrl>
-    <version>1.4</version>
-    <creationDate>16 November, 2014</creationDate>
+    <version>1.5</version>
+    <creationDate>20 February, 2015</creationDate>
     <description><![CDATA[
 	<p>CrowdFunding Payment - WePay is a plugin that provides functionality for making a payment via WePay, using iFrame form method.</p>
     <p><strong>NOTE</strong>: WePay only works with USD.</p>
     <p>Invest in the extension and help for its improvement. You can <a href="http://itprism.com/sponsorship" target="_blank">sponsor the extension via SMS, PayPal or Bitcoin</a>.</p>
 	<p><a href='http://itprism.com/' target='_blank'>Subscribe for the newsletter</a> to receive information about updates and new ITPrism extensions.</p>
-	<p>Please, <a href='http://extensions.joomla.org/extensions/e-commerce/donations/23876' target='_blank'>vote for the extension</a> on Joomla! Extensions Directory</p>
+	<p>Please, <a href='http://extensions.joomla.org/extensions/extension/e-commerce/donations/crowdfunding' target='_blank'>vote for the extension</a> on Joomla! Extensions Directory</p>
 	]]></description>
     
     <help url="PLG_CROWDFUNDINGPAYMENT_WEPAY_HELP_URL"/>
     
     <files>
         <filename plugin="wepay">wepay.php</filename>
-        <filename>index.html</filename>
-        
+
         <folder>language</folder>
 		<folder>images</folder>
     </files>
@@ -29,23 +28,12 @@
     <config>
 		<fields name="params">
 			<fieldset name="basic" addfieldpath="/administrator/components/com_crowdfunding/models/fields">
-			
     	        <field name="wepay_account_id" type="text" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_ACCOUNT_ID" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_ACCOUNT_ID_DESC" />
     	        <field name="wepay_access_token" type="text" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_ACCESS_TOKEN" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_ACCESS_TOKEN_DESC" size="10" class="span10" />
                 <field name="wepay_client_id" type="text" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_CLIENT_ID" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_CLIENT_ID_DESC" />
                 <field name="wepay_client_secret" type="text" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_CLIENT_SECRET" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_CLIENT_SECRET_DESC" />
-                <field name="wepay_return_url" type="text" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_REDIRECT_URL" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_REDIRECT_URL_DESC" class="span6" />
-                <field name="wepay_notify_url" type="text" default="index.php?option=com_crowdfunding&amp;task=notifier.notify&amp;format=raw&amp;payment_service=wepay" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_NOTIFY_URL" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_NOTIFY_URL_DESC" class="span6" />
-                
-                <field name="wepay_display_info" type="radio" default="1" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_DISPLAY_INFO" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_DISPLAY_INFO_DESC" class="btn-group" >
-                    <option value="0">JNO</option>
-                    <option value="1">JYES</option>
-                </field>
-                
-                <field name="wepay_use_cacert" type="radio" default="0" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_USE_CUSTOM_CERTIFICATE" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_USE_CUSTOM_CERTIFICATE_DESC" class="btn-group" >
-                    <option value="0">JNO</option>
-                    <option value="1">JYES</option>
-                </field>
+                <field name="return_url" type="text" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_REDIRECT_URL" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_REDIRECT_URL_DESC" class="span6" />
+                <field name="callback_url" type="text" default="index.php?option=com_crowdfunding&amp;task=notifier.notify&amp;format=raw&amp;payment_service=wepay" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_NOTIFY_URL" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_NOTIFY_URL_DESC" class="span6" />
 			</fieldset>
 
             <fieldset name="sandbox" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_STAGING">
@@ -64,6 +52,21 @@
                 <field name="email_mode" type="list" default="html" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_EMAIL_MODE" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_EMAIL_MODE_DESC" >
                     <option value="plain">PLG_CROWDFUNDINGPAYMENT_WEPAY_PLAIN</option>
                     <option value="html">PLG_CROWDFUNDINGPAYMENT_WEPAY_HTML</option>
+                </field>
+            </fieldset>
+
+            <fieldset name="advanced">
+                <field name="wepay_display_info" type="radio" default="1" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_DISPLAY_INFO" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_DISPLAY_INFO_DESC" class="btn-group" >
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+                <field name="wepay_use_cacert" type="radio" default="0" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_USE_CUSTOM_CERTIFICATE" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_USE_CUSTOM_CERTIFICATE_DESC" class="btn-group" >
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+                <field name="fees_payer" type="list" default="payer" label="PLG_CROWDFUNDINGPAYMENT_WEPAY_FEES_PAYER" description="PLG_CROWDFUNDINGPAYMENT_WEPAY_FEES_PAYER_DESC">
+                    <option value="payer">PLG_CROWDFUNDINGPAYMENT_WEPAY_PAYER</option>
+                    <option value="payee">PLG_CROWDFUNDINGPAYMENT_WEPAY_PAYEE</option>
                 </field>
             </fieldset>
 	            
