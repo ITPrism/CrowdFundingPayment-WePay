@@ -1,6 +1,6 @@
 <?php
 /**
- * @package      CrowdFunding
+ * @package      Crowdfunding
  * @subpackage   Plugins
  * @author       Todor Iliev
  * @copyright    Copyright (C) 2015 Todor Iliev <todor@itprism.com>. All rights reserved.
@@ -10,15 +10,17 @@
 // no direct access
 defined('_JEXEC') or die;
 
-jimport('crowdfunding.payment.plugin');
+jimport("Prism.init");
+jimport("Crowdfunding.init");
+jimport("EmailTemplates.init");
 
 /**
- * CrowdFunding WePay Payment Plugin
+ * Crowdfunding WePay Payment Plugin
  *
- * @package      CrowdFunding
+ * @package      Crowdfunding
  * @subpackage   Plugins
  */
-class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
+class plgCrowdfundingPaymentWePay extends Crowdfunding\Payment\Plugin
 {
     const WEPAY_ERROR_CONFIGURATION = 101;
     const WEPAY_ERROR_CHECKOUT      = 102;
@@ -27,6 +29,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
 
     protected $textPrefix           = "PLG_CROWDFUNDINGPAYMENT_WEPAY";
     protected $debugType            = "WEPAY_PAYMENT_PLUGIN_DEBUG";
+    protected $errorType            = "WEPAY_PAYMENT_PLUGIN_ERROR";
 
     protected $extraDataKeys        = array(
         "account_id", "type", "fee_payer", "state", "auto_capture", "app_fee",
@@ -76,31 +79,30 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
         // Load the script that initialize the select element with banks.
         JHtml::_("jquery.framework");
 
-        // Get intention
-        $userId  = JFactory::getUser()->get("id");
-        $aUserId = $this->app->getUserState("auser_id");
+        // Get payment session
+        $paymentSessionContext    = Crowdfunding\Constants::PAYMENT_SESSION_CONTEXT . $item->id;
+        $paymentSessionLocal      = $this->app->getUserState($paymentSessionContext);
 
-        // Create intention object
-        $intention = $this->getIntention(array(
-            "user_id"    => $userId,
-            "auser_id"   => $aUserId,
-            "project_id" => $item->id
+        $paymentSession = $this->getPaymentSession(array(
+            "session_id"    => $paymentSessionLocal->session_id
         ));
 
         $accountId    = (int)$this->params->get("wepay_account_id");
         $clientId     = (int)$this->params->get("wepay_client_id");
-        $clientSecret = JString::trim($this->params->get("wepay_client_secret"));
+        $clientSecret = Joomla\String\String::trim($this->params->get("wepay_client_secret"));
 
         // Get access token
         if ($this->params->get("wepay_staging", 1)) { // Staging server access token.
-            $accessToken  = JString::trim($this->params->get("wepay_staging_access_token"));
+            $accessToken  = Joomla\String\String::trim($this->params->get("wepay_staging_access_token"));
         } else {// Live server access token.
-            $accessToken  = JString::trim($this->params->get("wepay_access_token"));
+            $accessToken  = Joomla\String\String::trim($this->params->get("wepay_access_token"));
         }
 
         if (!$accountId or !$accessToken or !$clientId or !$clientSecret) {
             $error = self::WEPAY_ERROR_CONFIGURATION;
         }
+
+        $response = null;
 
         if (!$error) { // Create checkout object
 
@@ -113,7 +115,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
 
             try {
 
-                jimport("itprism.payment.wepay.libs.wepay");
+                jimport("Prism.Payment.WePay.libs.wepay");
 
                 if ($this->params->get("wepay_staging", 1)) {
                     Wepay::useStaging($clientId, $clientSecret);
@@ -138,8 +140,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
                         'callback_uri'      => $notifyUrl,
                         'mode'              => "iframe",
                         'fee_payer'         => $this->params->get("fees_payer", "payee")
-                    ),
-                    $customCertificate
+                    )
                 );
 
                 // DEBUG DATA
@@ -148,16 +149,15 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
                 // DEBUG DATA
                 JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_WEPAY_COR"), $this->debugType, $response) : null;
 
-                $intentionData = array(
+                $paymentSessionData = array(
                     "unique_key" => $response->checkout_id,
                     "gateway"    => "WePay"
                 );
 
-                $intention->bind($intentionData);
-                $intention->store();
+                $paymentSession->bind($paymentSessionData);
+                $paymentSession->store();
 
             } catch (Exception $e) {
-
                 JLog::add($e->getMessage());
                 $error = self::WEPAY_ERROR_CHECKOUT;
             }
@@ -168,31 +168,30 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
 
         $html[] = '<h4><img src="' . $pluginURI . '/images/wepay_icon.png" width="32" height="32" alt="WePay" />' . JText::_($this->textPrefix . "_TITLE") . '</h4>';
 
-        if (!$error) {
+        if (!$error and is_object($response)) {
 
             $html[] = '<div class="cf-wepay-payment">';
 
-            $html[] = '<div id="cf-wepay-payment-form">';
+            $html[] = '<div id="js-cfwepay-payment-form">';
             $html[] = '</div>';
 
-            $html[] = '<div class="clearfix"></div>';
-
             if ($this->params->get('wepay_display_info', 1)) {
-                $html[] = '<p class="alert alert-info"><i class="icon-info-sign"></i>' . JText::_($this->textPrefix . "_INFO") . '</p>';
+                $html[] = '<p class="bg-info p-10-5"><span class="glyphicon glyphicon-info-sign"></span> ' . JText::_($this->textPrefix . "_INFO") . '</p>';
             }
 
             if ($this->params->get('wepay_sandbox', 1)) {
-                $html[] = '<p class="alert alert-info"><i class="icon-info-sign"></i>' . JText::_($this->textPrefix . "_WORKS_SANDBOX") . '</p>';
+                $html[] = '<p class="bg-info p-10-5"><span class="glyphicon glyphicon-info-sign"></span> ' . JText::_($this->textPrefix . "_WORKS_SANDBOX") . '</p>';
             }
 
             $html[] = '</div>';
 
             // Add scripts
+            JHtml::_('jquery.framework');
             $doc->addScript("https://www.wepay.com/min/js/iframe.wepay.js");
 
             $js = '
             jQuery(document).ready(function() {
-            	WePay.iframe_checkout("cf-wepay-payment-form", "' . $response->checkout_uri . '");
+            	WePay.iframe_checkout("js-cfwepay-payment-form", "' . $response->checkout_uri . '");
             });';
 
             $doc->addScriptDeclaration($js);
@@ -201,11 +200,11 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
 
             switch ($error) {
                 case 101:
-                    $html[] = '<div class="alert">' . JText::_($this->textPrefix . "_ERROR_CONFIGURATION") . '</div>';
+                    $html[] = '<div class="bg-warning p-5"><span class="glyphicon glyphicon-warning-sign"></span>' . JText::_($this->textPrefix . "_ERROR_CONFIGURATION") . '</div>';
                     break;
 
                 case 102:
-                    $html[] = '<div class="alert">' . JText::_($this->textPrefix . "_ERROR_CANNOT_CREATE_CHECKOUT") . '</div>';
+                    $html[] = '<div class="bg-warning p-5"><span class="glyphicon glyphicon-warning-sign"></span>' . JText::_($this->textPrefix . "_ERROR_CANNOT_CREATE_CHECKOUT") . '</div>';
                     break;
             }
 
@@ -280,49 +279,42 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
         );
 
         // Get currency
-        jimport("crowdfunding.currency");
         $currencyId = $params->get("project_currency");
-        $currency   = CrowdFundingCurrency::getInstance(JFactory::getDbo(), $currencyId);
+        $currency   = Crowdfunding\Currency::getInstance(JFactory::getDbo(), $currencyId);
 
-        // Get intention data
+        // Get payment session data
         $keys = array(
             "unique_key" => $checkoutId
         );
-        jimport("crowdfunding.intention");
-        $intention = new CrowdFundingIntention(JFactory::getDbo());
-        $intention->load($keys);
+        $paymentSession = $this->getPaymentSession($keys);
 
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_INTENTION"), $this->debugType, $intention->getProperties()) : null;
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_PAYMENT_SESSION"), $this->debugType, $paymentSession->getProperties()) : null;
 
         // Validate the payment gateway.
-        $gateway = $intention->getGateway();
+        $gateway = $paymentSession->getGateway();
         if (!$this->isValidPaymentGateway($gateway)) {
             $this->log->add(
                 JText::_($this->textPrefix . "_ERROR_INVALID_PAYMENT_GATEWAY"),
                 "WEPAY_PAYMENT_PLUGIN_ERROR",
-                array("INTENTION" => $intention->getProperties())
+                array("PAYMENT_SESSION" => $paymentSession->getProperties())
             );
 
             return null;
         }
 
-        jimport("itprism.payment.wepay.libs.wepay");
+        jimport("Prism.Payment.WePay.libs.wepay");
 
         $clientId     = (int)$this->params->get("wepay_client_id");
-        $clientSecret = JString::trim($this->params->get("wepay_client_secret"));
+        $clientSecret = Joomla\String\String::trim($this->params->get("wepay_client_secret"));
 
         // Get access token
         if ($this->params->get("wepay_staging", 1)) { // Staging server access token.
-
-            $accessToken  = JString::trim($this->params->get("wepay_staging_access_token"));
+            $accessToken  = Joomla\String\String::trim($this->params->get("wepay_staging_access_token"));
             Wepay::useStaging($clientId, $clientSecret);
-
         } else {// Live server access token.
-
-            $accessToken  = JString::trim($this->params->get("wepay_access_token"));
+            $accessToken  = Joomla\String\String::trim($this->params->get("wepay_access_token"));
             Wepay::useProduction($clientId, $clientSecret);
-
         }
 
         $customCertificate = (!$this->params->get("wepay_use_cacert", 0)) ? false : true;
@@ -358,10 +350,10 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
 
         }
 
-        $response = JArrayHelper::fromObject($response);
+        $response = Joomla\Utilities\ArrayHelper::fromObject($response);
 
         // Validate transaction data
-        $validData = $this->validateData($response, $currency->getAbbr(), $intention);
+        $validData = $this->validateData($response, $currency->getCode(), $paymentSession);
         if (is_null($validData)) {
             return $result;
         }
@@ -370,9 +362,8 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
         JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_VALID_DATA"), $this->debugType, $validData) : null;
 
         // Get project
-        jimport("crowdfunding.project");
-        $projectId = JArrayHelper::getValue($validData, "project_id");
-        $project   = CrowdFundingProject::getInstance(JFactory::getDbo(), $projectId);
+        $projectId = Joomla\Utilities\ArrayHelper::getValue($validData, "project_id");
+        $project   = Crowdfunding\Project::getInstance(JFactory::getDbo(), $projectId);
 
         // DEBUG DATA
         JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_PROJECT_OBJECT"), $this->debugType, $project->getProperties()) : null;
@@ -398,7 +389,7 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
         }
 
         // Update the number of distributed reward.
-        $rewardId = JArrayHelper::getValue($transactionData, "reward_id");
+        $rewardId = Joomla\Utilities\ArrayHelper::getValue($transactionData, "reward_id");
         $reward   = null;
         if (!empty($rewardId)) {
             $reward = $this->updateReward($transactionData);
@@ -411,35 +402,35 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
 
         //  Prepare the data that will be returned
 
-        $result["transaction"] = JArrayHelper::toObject($transactionData);
+        $result["transaction"] = Joomla\Utilities\ArrayHelper::toObject($transactionData);
 
         // Generate object of data based on the project properties
         $properties        = $project->getProperties();
-        $result["project"] = JArrayHelper::toObject($properties);
+        $result["project"] = Joomla\Utilities\ArrayHelper::toObject($properties);
 
         // Generate object of data based on the reward properties
         if (!empty($reward)) {
             $properties       = $reward->getProperties();
-            $result["reward"] = JArrayHelper::toObject($properties);
+            $result["reward"] = Joomla\Utilities\ArrayHelper::toObject($properties);
         }
 
-        // Generate data object, based on the intention properties.
-        $properties       = $intention->getProperties();
-        $result["payment_session"] = JArrayHelper::toObject($properties);
+        // Generate data object, based on the payment session properties.
+        $properties       = $paymentSession->getProperties();
+        $result["payment_session"] = Joomla\Utilities\ArrayHelper::toObject($properties);
 
         // DEBUG DATA
         JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_RESULT_DATA"), $this->debugType, $result) : null;
 
-        // Remove intention
-        $intention->delete();
-        unset($intention);
+        // Remove payment session.
+        $txnStatus = (isset($result["transaction"]->txn_status)) ? $result["transaction"]->txn_status : null;
+        $this->closePaymentSession($paymentSession, $txnStatus);
 
         return $result;
 
     }
 
     /**
-     * This metod is executed after complete payment.
+     * This method is executed after complete payment.
      * It is used to be sent mails to user and administrator
      *
      * @param string $context
@@ -479,17 +470,17 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
      *
      * @param array  $data
      * @param string $currency
-     * @param CrowdFundingIntention  $intention
+     * @param Crowdfunding\Payment\Session  $paymentSession
      *
      * @return array
      */
-    protected function validateData($data, $currency, $intention)
+    protected function validateData($data, $currency, $paymentSession)
     {
-        $timesamp = JArrayHelper::getValue($data, "create_time");
+        $timesamp = Joomla\Utilities\ArrayHelper::getValue($data, "create_time");
         $date     = new JDate($timesamp);
 
         // Prepare transaction status.
-        $txnState = JArrayHelper::getValue($data, "state");
+        $txnState = Joomla\Utilities\ArrayHelper::getValue($data, "state");
         switch ($txnState) {
             case "captured":
                 $txnState = "completed";
@@ -507,11 +498,11 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
 
         // Prepare transaction data.
         $transaction = array(
-            "investor_id"      => $intention->getUserId(),
-            "project_id"       => $intention->getProjectId(),
-            "reward_id"        => ($intention->isAnonymous()) ? 0 : $intention->getRewardId(),
-            "txn_id"           => JArrayHelper::getValue($data, "checkout_id"),
-            "txn_amount"       => JArrayHelper::getValue($data, "amount"),
+            "investor_id"      => $paymentSession->getUserId(),
+            "project_id"       => $paymentSession->getProjectId(),
+            "reward_id"        => ($paymentSession->isAnonymous()) ? 0 : $paymentSession->getRewardId(),
+            "txn_id"           => Joomla\Utilities\ArrayHelper::getValue($data, "checkout_id"),
+            "txn_amount"       => Joomla\Utilities\ArrayHelper::getValue($data, "amount"),
             "txn_currency"     => $currency,
             "txn_status"       => $txnState,
             "txn_date"         => $date->toSql(),
@@ -538,18 +529,17 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
      * Save transaction
      *
      * @param array               $transactionData
-     * @param CrowdFundingProject $project
+     * @param Crowdfunding\Project $project
      *
      * @return null|array
      */
     protected function storeTransaction($transactionData, $project)
     {
         // Get transaction by txn ID
-        jimport("crowdfunding.transaction");
         $keys        = array(
-            "txn_id" => JArrayHelper::getValue($transactionData, "txn_id")
+            "txn_id" => Joomla\Utilities\ArrayHelper::getValue($transactionData, "txn_id")
         );
-        $transaction = new CrowdFundingTransaction(JFactory::getDbo());
+        $transaction = new Crowdfunding\Transaction(JFactory::getDbo());
         $transaction->load($keys);
 
         // DEBUG DATA
@@ -590,9 +580,9 @@ class plgCrowdFundingPaymentWePay extends CrowdFundingPaymentPlugin
         }
 
         // update project funded amount.
-        $amount = JArrayHelper::getValue($transactionData, "txn_amount");
+        $amount = Joomla\Utilities\ArrayHelper::getValue($transactionData, "txn_amount");
         $project->addFunds($amount);
-        $project->updateFunds();
+        $project->storeFunds();
 
         return $transactionData;
     }

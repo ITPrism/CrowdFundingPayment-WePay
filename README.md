@@ -1,9 +1,9 @@
-CrowdFunding Payment - WePay
+Crowdfunding Payment - WePay
 ==========================
-( Version 1.5 )
+( Version 2.0 )
 - - -
 
-This is a payment plugin for CrowdFunding platform, which provides an ability to make payments via WePay, using iFrame form method.
+This is a payment plugin for Crowdfunding platform, which provides an ability to make payments via WePay, using iFrame form method.
 
 Changelog
 ---------
